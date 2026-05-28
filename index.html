@@ -246,12 +246,9 @@ a:hover { color: var(--paris-terra); }
   margin-top: 6px;
   font-size: 12px;
   color: var(--paris-stone);
-  display: flex; flex-wrap: wrap; gap: 8px 12px;
+  display: flex; flex-wrap: wrap; align-items: center; gap: 8px;
 }
-.apt-card__meta span { display: inline-flex; align-items: center; }
-.apt-card__meta span + span::before {
-  content: "·"; color: var(--paris-mist); margin-right: 12px;
-}
+.apt-card__meta-text { color: var(--paris-stone); }
 .apt-card__notes {
   margin: 8px 0 0;
   font-size: 12.5px;
@@ -281,6 +278,33 @@ a:hover { color: var(--paris-terra); }
 .score-pill[data-score="D"] { background: var(--score-D); }
 .score-pill[data-score="E"] { background: var(--score-E); }
 .score-pill[data-score="F"] { background: var(--score-F); }
+
+/* Bolig-type-merke (Leilighet / Hybel) */
+.type-chip {
+  display: inline-flex;
+  align-items: center;
+  padding: 1px 8px;
+  border-radius: 4px;
+  background: var(--paris-bone);
+  border: 1px solid var(--paris-border);
+  font-size: 11px;
+  color: var(--paris-stone);
+  letter-spacing: 0.02em;
+  text-transform: uppercase;
+  font-weight: 500;
+}
+.type-chip[data-type="hybel"] {
+  background: #f0e8d8;
+  border-color: #d6c8a8;
+  color: var(--paris-ink);
+}
+
+/* Hjelpetekst under skjemarad */
+.field-hint {
+  font-size: 11.5px;
+  color: var(--paris-mist);
+  margin-top: -4px;
+}
 
 .empty {
   padding: 24px 14px;
@@ -550,7 +574,8 @@ body.modal-open { overflow: hidden; }
   display: flex; justify-content: space-between; align-items: flex-start; gap: 10px;
 }
 .popup-meta {
-  font-size: 12px; color: var(--paris-stone); margin-top: 3px;
+  font-size: 12px; color: var(--paris-stone); margin-top: 6px;
+  display: flex; flex-wrap: wrap; align-items: center; gap: 6px;
 }
 .popup-score {
   display: inline-flex; align-items: center; justify-content: center;
@@ -692,8 +717,11 @@ body.modal-open { overflow: hidden; }
         <input name="address" required placeholder="f.eks. 23 Rue de Rivoli, 75001 Paris" />
       </label>
       <div class="form-row">
-        <label>Pris (€/mnd)
-          <input name="price" type="number" min="0" step="10" inputmode="numeric" />
+        <label>Bolig-type
+          <select name="type">
+            <option value="leilighet">Leilighet</option>
+            <option value="hybel">Hybel</option>
+          </select>
         </label>
         <label>Størrelse (m²)
           <input name="size" type="number" min="0" step="1" inputmode="numeric" />
@@ -702,6 +730,21 @@ body.modal-open { overflow: hidden; }
           <input name="bedrooms" type="number" min="0" step="1" inputmode="numeric" />
         </label>
       </div>
+      <div class="form-row">
+        <label>Valuta
+          <select name="currency">
+            <option value="EUR">EUR (€)</option>
+            <option value="NOK">NOK (kr)</option>
+          </select>
+        </label>
+        <label>Totalpris / mnd
+          <input name="priceTotal" type="number" min="0" step="10" inputmode="numeric" />
+        </label>
+        <label>Pris per person / mnd
+          <input name="pricePerPerson" type="number" min="0" step="10" inputmode="numeric" />
+        </label>
+      </div>
+      <p class="field-hint">Fyll inn én av prisene — den andre regnes automatisk ut (3 personer).</p>
       <div class="form-row two">
         <label>Score
           <select name="score">
@@ -778,6 +821,10 @@ body.modal-open { overflow: hidden; }
   const TYPE_LABEL = { school: 'Skole', transport: 'Transport', sight: 'Severdighet', other: 'Annet' };
   const TYPE_SYMBOL = { school: '🎓', transport: '🚉', sight: '★', other: '◆' };
 
+  // Antall personer som deler bolig — brukes til å regne ut pris per person
+  const NUM_PERSONS = 3;
+  const HOUSING_LABEL = { leilighet: 'Leilighet', hybel: 'Hybel' };
+
   // ---- Tilstand -----------------------------------------------------------
   const state = {
     apartments: [],
@@ -802,10 +849,33 @@ body.modal-open { overflow: hidden; }
       '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;'
     })[c]);
   }
-  function formatPrice(n) {
-    if (n === null || n === undefined || n === '') return '—';
-    return '€' + Number(n).toLocaleString('nb-NO');
+  // Formaterer beløp etter valuta. EUR: "€1 500". NOK: "1 500 kr".
+  function formatMoney(n, currency) {
+    if (n === null || n === undefined || n === '') return null;
+    const v = Number(n).toLocaleString('nb-NO');
+    return currency === 'NOK' ? `${v} kr` : `€${v}`;
   }
+
+  // Returnerer { total, perPerson } — fyller ut den som mangler ved divisjon/multiplikasjon
+  function computePrices(apt) {
+    let total = (apt.priceTotal === '' || apt.priceTotal == null) ? null : Number(apt.priceTotal);
+    let per   = (apt.pricePerPerson === '' || apt.pricePerPerson == null) ? null : Number(apt.pricePerPerson);
+    if (total != null && per == null)  per   = Math.round(total / NUM_PERSONS);
+    if (per   != null && total == null) total = per * NUM_PERSONS;
+    return { total, perPerson: per };
+  }
+
+  // Bygger en lesbar prisstreng som "€1 500 · €500/pers" — null hvis ingen pris
+  function formatPriceLabel(apt) {
+    const { total, perPerson } = computePrices(apt);
+    if (total == null && perPerson == null) return null;
+    const curr = apt.currency || 'EUR';
+    const parts = [];
+    if (total != null)     parts.push(formatMoney(total, curr));
+    if (perPerson != null) parts.push(`${formatMoney(perPerson, curr)}/pers`);
+    return parts.join(' · ');
+  }
+
   function formatTimestamp(ts) {
     if (!ts) return '';
     const d = new Date(ts);
@@ -825,12 +895,25 @@ body.modal-open { overflow: hidden; }
       toast('Klarte ikke å lagre i nettleseren.', 'error');
     }
   }
+  // Migrerer en leilighet til nyeste skjema:
+  //   - gammelt felt "price" (EUR/mnd) tolkes som totalpris
+  //   - default type = "leilighet", default valuta = "EUR"
+  function migrateApartment(a) {
+    if (a.price != null && a.priceTotal == null && a.pricePerPerson == null) {
+      a.priceTotal = a.price;
+    }
+    delete a.price;
+    if (!a.type) a.type = 'leilighet';
+    if (!a.currency) a.currency = 'EUR';
+    return a;
+  }
+
   function hydrate() {
     try {
       const raw = localStorage.getItem(STORAGE_KEY);
       if (!raw) return;
       const data = JSON.parse(raw);
-      if (Array.isArray(data.apartments))  state.apartments  = data.apartments;
+      if (Array.isArray(data.apartments))  state.apartments  = data.apartments.map(migrateApartment);
       if (Array.isArray(data.fixedPoints)) state.fixedPoints = data.fixedPoints;
       if (Array.isArray(data.resources))   state.resources   = data.resources;
     } catch (e) {
@@ -947,11 +1030,16 @@ body.modal-open { overflow: hidden; }
     });
   }
   function aptPopupHTML(apt) {
+    const priceLabel = formatPriceLabel(apt);
     const meta = [
-      formatPrice(apt.price),
+      priceLabel,
       apt.size ? `${apt.size} m²` : null,
       apt.bedrooms != null ? `${apt.bedrooms} sov.` : null,
     ].filter(Boolean).join(' · ');
+
+    const typeChip = apt.type
+      ? `<span class="type-chip" data-type="${apt.type}">${HOUSING_LABEL[apt.type] || apt.type}</span>`
+      : '';
 
     const score = apt.score
       ? `<span class="popup-score" data-score="${apt.score}">${apt.score}</span>`
@@ -1006,7 +1094,10 @@ body.modal-open { overflow: hidden; }
         <strong>${escapeHTML(apt.address || 'Uten adresse')}</strong>
         ${score}
       </div>
-      <div class="popup-meta">${escapeHTML(meta) || 'Ingen detaljer'}</div>
+      <div class="popup-meta">
+        ${typeChip}
+        ${meta ? `<span>${escapeHTML(meta)}</span>` : (typeChip ? '' : 'Ingen detaljer')}
+      </div>
       ${notes}
       ${travelHTML}
       <div class="popup-actions">
@@ -1093,27 +1184,39 @@ body.modal-open { overflow: hidden; }
       return;
     }
 
-    // Sortér på score (A først), så pris
+    // Sortér på score (A først), så total pris (beregnet om bare per-pers er fylt ut)
     const sorted = [...state.apartments].sort((a, b) => {
       const sa = a.score || 'Z', sb = b.score || 'Z';
       if (sa !== sb) return sa.localeCompare(sb);
-      return (a.price ?? Infinity) - (b.price ?? Infinity);
+      const pa = computePrices(a).total ?? Infinity;
+      const pb = computePrices(b).total ?? Infinity;
+      return pa - pb;
     });
 
-    listEl.innerHTML = sorted.map(apt => `
-      <article class="apt-card" data-id="${apt.id}" role="button" tabindex="0">
-        <header class="apt-card__head">
-          <div class="apt-card__addr">${escapeHTML(apt.address || 'Uten adresse')}</div>
-          ${apt.score ? `<span class="score-pill" data-score="${apt.score}">${apt.score}</span>` : ''}
-        </header>
-        <div class="apt-card__meta">
-          <span>${formatPrice(apt.price)}</span>
-          ${apt.size ? `<span>${apt.size} m²</span>` : ''}
-          ${apt.bedrooms != null ? `<span>${apt.bedrooms} sov.</span>` : ''}
-        </div>
-        ${apt.notes ? `<p class="apt-card__notes">${escapeHTML(apt.notes)}</p>` : ''}
-      </article>
-    `).join('');
+    listEl.innerHTML = sorted.map(apt => {
+      const priceLabel = formatPriceLabel(apt);
+      const typeChip = apt.type
+        ? `<span class="type-chip" data-type="${apt.type}">${HOUSING_LABEL[apt.type] || apt.type}</span>`
+        : '';
+      const metaText = [
+        priceLabel,
+        apt.size ? `${apt.size} m²` : null,
+        apt.bedrooms != null ? `${apt.bedrooms} sov.` : null,
+      ].filter(Boolean).join(' · ');
+      return `
+        <article class="apt-card" data-id="${apt.id}" role="button" tabindex="0">
+          <header class="apt-card__head">
+            <div class="apt-card__addr">${escapeHTML(apt.address || 'Uten adresse')}</div>
+            ${apt.score ? `<span class="score-pill" data-score="${apt.score}">${apt.score}</span>` : ''}
+          </header>
+          <div class="apt-card__meta">
+            ${typeChip}
+            ${metaText ? `<span class="apt-card__meta-text">${escapeHTML(metaText)}</span>` : ''}
+          </div>
+          ${apt.notes ? `<p class="apt-card__notes">${escapeHTML(apt.notes)}</p>` : ''}
+        </article>
+      `;
+    }).join('');
 
     $$('.apt-card', listEl).forEach(card => {
       card.addEventListener('click', () => selectApartment(card.dataset.id));
@@ -1261,13 +1364,20 @@ body.modal-open { overflow: hidden; }
     form.dataset.editingId = id || '';
     $('#modal-apartment-title').textContent = apt ? 'Rediger leilighet' : 'Ny leilighet';
     if (apt) {
-      form.address.value  = apt.address || '';
-      form.price.value    = apt.price ?? '';
-      form.size.value     = apt.size ?? '';
-      form.bedrooms.value = apt.bedrooms ?? '';
-      form.url.value      = apt.url || '';
-      form.score.value    = apt.score || '';
-      form.notes.value    = apt.notes || '';
+      form.address.value        = apt.address || '';
+      form.type.value           = apt.type || 'leilighet';
+      form.currency.value       = apt.currency || 'EUR';
+      form.priceTotal.value     = apt.priceTotal ?? '';
+      form.pricePerPerson.value = apt.pricePerPerson ?? '';
+      form.size.value           = apt.size ?? '';
+      form.bedrooms.value       = apt.bedrooms ?? '';
+      form.url.value            = apt.url || '';
+      form.score.value          = apt.score || '';
+      form.notes.value          = apt.notes || '';
+    } else {
+      // Sett fornuftige defaults for nytt skjema
+      form.type.value = 'leilighet';
+      form.currency.value = 'EUR';
     }
     showModal($('#modal-apartment'));
   }
@@ -1283,12 +1393,15 @@ body.modal-open { overflow: hidden; }
 
     const fields = {
       address,
-      price:    form.price.value    !== '' ? Number(form.price.value)    : null,
-      size:     form.size.value     !== '' ? Number(form.size.value)     : null,
-      bedrooms: form.bedrooms.value !== '' ? Number(form.bedrooms.value) : null,
-      url:      form.url.value.trim() || null,
-      score:    form.score.value || null,
-      notes:    form.notes.value.trim() || null,
+      type:           form.type.value || 'leilighet',
+      currency:       form.currency.value === 'NOK' ? 'NOK' : 'EUR',
+      priceTotal:     form.priceTotal.value     !== '' ? Number(form.priceTotal.value)     : null,
+      pricePerPerson: form.pricePerPerson.value !== '' ? Number(form.pricePerPerson.value) : null,
+      size:           form.size.value           !== '' ? Number(form.size.value)           : null,
+      bedrooms:       form.bedrooms.value       !== '' ? Number(form.bedrooms.value)       : null,
+      url:            form.url.value.trim() || null,
+      score:          form.score.value || null,
+      notes:          form.notes.value.trim() || null,
     };
 
     const submitBtn = form.querySelector('[type="submit"]');
