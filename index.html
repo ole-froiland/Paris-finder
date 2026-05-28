@@ -1,0 +1,1526 @@
+<!doctype html>
+<html lang="nb">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+<meta name="description" content="Personlig boligkartlegger for Paris — kart, reisetider og notater." />
+<meta name="theme-color" content="#f5efe5" />
+<title>Paris finder — boligkartlegger</title>
+
+<!-- Skrifter -->
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@500;600;700&family=Inter:wght@400;500;600&display=swap" rel="stylesheet" />
+
+<!-- Leaflet (kart) via CDN -->
+<link rel="stylesheet"
+      href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"
+      crossorigin="" />
+
+<style>
+/* =============================================================================
+   Paris finder — design system
+   Paletten henter inspirasjon fra Paris: kalkstein, mansard-tak, terracotta og
+   parker. Cormorant Garamond i overskriftene, Inter i brødtekst.
+   ========================================================================== */
+:root {
+  --paris-cream:   #f5efe5;
+  --paris-bone:    #faf6f0;
+  --paris-paper:   #ffffff;
+  --paris-border:  #e8dfcb;
+  --paris-border-strong: #cdbf9f;
+  --paris-ink:     #2d2620;
+  --paris-stone:   #6c6258;
+  --paris-mist:    #a99e8e;
+  --paris-sage:    #91a283;
+  --paris-sky:     #6b8499;
+  --paris-terra:   #c47862;
+  --paris-terra-dk:#a85d4a;
+  --paris-rose:    #d4a89c;
+  --paris-shadow:  rgba(74, 60, 47, 0.08);
+  --paris-shadow-strong: rgba(74, 60, 47, 0.16);
+
+  --score-A: #6fa177;
+  --score-B: #95b46e;
+  --score-C: #d4a142;
+  --score-D: #cf8550;
+  --score-E: #b86354;
+  --score-F: #8a3b30;
+
+  --radius-sm: 6px;
+  --radius:    10px;
+  --radius-lg: 16px;
+
+  --ff-serif: "Cormorant Garamond", Georgia, serif;
+  --ff-sans:  "Inter", system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+}
+
+* { box-sizing: border-box; }
+html, body { height: 100%; margin: 0; }
+body {
+  font-family: var(--ff-sans);
+  font-size: 14px;
+  line-height: 1.5;
+  color: var(--paris-ink);
+  background: var(--paris-cream);
+  -webkit-font-smoothing: antialiased;
+  overflow: hidden; /* appen håndterer egen scrolling */
+}
+.serif { font-family: var(--ff-serif); font-weight: 600; letter-spacing: 0.005em; }
+
+a { color: var(--paris-terra-dk); }
+a:hover { color: var(--paris-terra); }
+
+/* ===== Layout ============================================================ */
+.app {
+  display: grid;
+  grid-template-columns: 420px 1fr;
+  height: 100vh;
+  height: 100dvh;
+}
+.sidebar {
+  background: var(--paris-bone);
+  border-right: 1px solid var(--paris-border);
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  position: relative;
+  z-index: 400;
+}
+.map { position: relative; min-height: 0; }
+#map { height: 100%; width: 100%; background: var(--paris-cream); }
+
+/* ===== Sidebar header ==================================================== */
+.sidebar__header {
+  padding: 22px 24px 14px;
+  border-bottom: 1px solid var(--paris-border);
+}
+.brand {
+  font-family: var(--ff-serif);
+  font-size: 30px;
+  font-weight: 600;
+  margin: 0;
+  letter-spacing: 0.01em;
+  color: var(--paris-ink);
+}
+.brand__sub {
+  margin: 2px 0 0;
+  font-size: 12px;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--paris-stone);
+}
+
+/* ===== Tabs ============================================================== */
+.tabs {
+  display: flex;
+  padding: 0 12px;
+  gap: 2px;
+  border-bottom: 1px solid var(--paris-border);
+  background: var(--paris-bone);
+}
+.tab-btn {
+  flex: 1;
+  background: transparent;
+  border: 0;
+  padding: 12px 8px;
+  font: inherit;
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--paris-stone);
+  border-bottom: 2px solid transparent;
+  cursor: pointer;
+  transition: color .15s, border-color .15s;
+}
+.tab-btn:hover { color: var(--paris-ink); }
+.tab-btn.is-active {
+  color: var(--paris-terra-dk);
+  border-bottom-color: var(--paris-terra);
+}
+
+/* ===== Tab content ======================================================= */
+.sidebar__body {
+  flex: 1;
+  overflow-y: auto;
+  padding: 16px 18px 32px;
+}
+.tab-panel { display: block; }
+
+/* ===== Knapper =========================================================== */
+.btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  padding: 9px 14px;
+  font: inherit;
+  font-size: 13px;
+  font-weight: 500;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--paris-border-strong);
+  background: var(--paris-paper);
+  color: var(--paris-ink);
+  cursor: pointer;
+  transition: background .12s, border-color .12s, transform .05s;
+}
+.btn:hover { background: #fbf7ef; }
+.btn:active { transform: translateY(1px); }
+.btn:disabled { opacity: .55; cursor: not-allowed; }
+
+.btn--primary {
+  background: var(--paris-terra);
+  border-color: var(--paris-terra);
+  color: #fff;
+}
+.btn--primary:hover { background: var(--paris-terra-dk); border-color: var(--paris-terra-dk); }
+
+.btn--ghost {
+  background: transparent;
+  border-color: transparent;
+  color: var(--paris-stone);
+}
+.btn--ghost:hover { background: rgba(74,60,47,.05); color: var(--paris-ink); }
+
+.btn--danger {
+  background: transparent;
+  border-color: #e6cbc4;
+  color: var(--paris-terra-dk);
+}
+.btn--danger:hover { background: #fbeee9; }
+
+.btn--sm { padding: 6px 10px; font-size: 12px; }
+.btn--block { width: 100%; }
+
+/* ===== Kortliste ========================================================= */
+.card-list { display: flex; flex-direction: column; gap: 10px; margin-top: 14px; }
+
+.apt-card,
+.fixed-card,
+.resource-card {
+  background: var(--paris-paper);
+  border: 1px solid var(--paris-border);
+  border-radius: var(--radius);
+  padding: 14px 16px;
+  cursor: pointer;
+  transition: border-color .15s, box-shadow .15s, transform .05s;
+}
+.apt-card:hover,
+.fixed-card:hover {
+  border-color: var(--paris-border-strong);
+  box-shadow: 0 6px 20px var(--paris-shadow);
+}
+.apt-card__head {
+  display: flex; align-items: flex-start; justify-content: space-between; gap: 12px;
+}
+.apt-card__addr {
+  font-family: var(--ff-serif);
+  font-size: 17px;
+  font-weight: 600;
+  line-height: 1.25;
+  color: var(--paris-ink);
+}
+.apt-card__meta {
+  margin-top: 6px;
+  font-size: 12px;
+  color: var(--paris-stone);
+  display: flex; flex-wrap: wrap; gap: 8px 12px;
+}
+.apt-card__meta span { display: inline-flex; align-items: center; }
+.apt-card__meta span + span::before {
+  content: "·"; color: var(--paris-mist); margin-right: 12px;
+}
+.apt-card__notes {
+  margin: 8px 0 0;
+  font-size: 12.5px;
+  color: var(--paris-stone);
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+.score-pill {
+  display: inline-flex;
+  align-items: center; justify-content: center;
+  min-width: 24px; height: 24px;
+  padding: 0 6px;
+  border-radius: 999px;
+  font-family: var(--ff-serif);
+  font-weight: 700;
+  font-size: 13px;
+  color: #fff;
+  background: var(--paris-mist);
+  letter-spacing: 0.02em;
+}
+.score-pill[data-score="A"] { background: var(--score-A); }
+.score-pill[data-score="B"] { background: var(--score-B); }
+.score-pill[data-score="C"] { background: var(--score-C); }
+.score-pill[data-score="D"] { background: var(--score-D); }
+.score-pill[data-score="E"] { background: var(--score-E); }
+.score-pill[data-score="F"] { background: var(--score-F); }
+
+.empty {
+  padding: 24px 14px;
+  text-align: center;
+  color: var(--paris-stone);
+  border: 1px dashed var(--paris-border-strong);
+  border-radius: var(--radius);
+  background: var(--paris-paper);
+  margin-top: 14px;
+}
+.empty small { display: block; margin-top: 6px; color: var(--paris-mist); }
+
+/* ===== Faste punkter ===================================================== */
+.fixed-card { display: flex; align-items: center; gap: 12px; }
+.fixed-card__icon {
+  width: 32px; height: 32px;
+  border-radius: 999px;
+  background: var(--paris-bone);
+  border: 1px solid var(--paris-border);
+  display: inline-flex; align-items: center; justify-content: center;
+  font-size: 15px; flex-shrink: 0;
+}
+.fixed-card__icon[data-type="school"]    { background: #eaf0e3; border-color: #c9d6bb; }
+.fixed-card__icon[data-type="transport"] { background: #e4ecf2; border-color: #b5c8d6; }
+.fixed-card__icon[data-type="sight"]     { background: #fbeee2; border-color: #e7caac; }
+.fixed-card__body { flex: 1; min-width: 0; }
+.fixed-card__name {
+  font-family: var(--ff-serif); font-size: 16px; font-weight: 600;
+  color: var(--paris-ink); line-height: 1.25;
+}
+.fixed-card__addr {
+  font-size: 12px; color: var(--paris-stone);
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+.fixed-card__actions { display: flex; gap: 4px; flex-shrink: 0; }
+.icon-btn {
+  width: 28px; height: 28px;
+  background: transparent; border: 0;
+  color: var(--paris-stone); cursor: pointer; border-radius: 6px;
+  display: inline-flex; align-items: center; justify-content: center;
+}
+.icon-btn:hover { background: rgba(74,60,47,.06); color: var(--paris-ink); }
+
+/* ===== Ressurser ========================================================= */
+.inline-form {
+  display: grid;
+  grid-template-columns: 1fr 1.4fr auto;
+  gap: 6px;
+  margin-bottom: 4px;
+}
+.inline-form input { min-width: 0; }
+.resource-card {
+  display: flex; align-items: center; justify-content: space-between; gap: 12px;
+  cursor: default;
+}
+.resource-card a {
+  font-family: var(--ff-serif); font-size: 16px; font-weight: 600;
+  color: var(--paris-ink); text-decoration: none;
+}
+.resource-card a:hover { color: var(--paris-terra-dk); text-decoration: underline; }
+.resource-card__url {
+  font-size: 11.5px; color: var(--paris-mist);
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+  display: block; max-width: 280px;
+}
+
+/* ===== Data / eksport ==================================================== */
+.data-actions { display: flex; flex-direction: column; gap: 8px; margin-top: 8px; }
+.data-stats {
+  margin-top: 18px; padding: 12px 14px;
+  background: var(--paris-paper); border: 1px solid var(--paris-border);
+  border-radius: var(--radius);
+  display: flex; flex-wrap: wrap; gap: 14px;
+  font-size: 12.5px; color: var(--paris-stone);
+}
+.data-stats strong { color: var(--paris-ink); font-weight: 600; margin-right: 4px; }
+.help-text { font-size: 12px; color: var(--paris-stone); margin-top: 14px; line-height: 1.55; }
+.help-text code {
+  background: var(--paris-bone); border: 1px solid var(--paris-border);
+  padding: 1px 6px; border-radius: 4px; font-size: 11.5px;
+}
+
+/* ===== Detaljvisning leilighet =========================================== */
+.detail-panel { padding: 4px 2px 8px; }
+.btn-back {
+  background: transparent; border: 0; color: var(--paris-stone);
+  font: inherit; font-size: 12.5px; padding: 4px 0; cursor: pointer;
+  margin-bottom: 6px;
+}
+.btn-back:hover { color: var(--paris-ink); }
+.detail-panel h2 { margin: 4px 0 8px; font-size: 22px; line-height: 1.2; }
+.detail-meta { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 12px; }
+.meta-chip {
+  display: inline-flex; align-items: center;
+  padding: 4px 10px; border-radius: 999px;
+  background: var(--paris-bone); border: 1px solid var(--paris-border);
+  font-size: 12px; color: var(--paris-ink);
+}
+.detail-panel .notes {
+  background: var(--paris-bone); border: 1px solid var(--paris-border);
+  border-radius: var(--radius); padding: 10px 12px;
+  font-size: 13px; color: var(--paris-stone); white-space: pre-wrap;
+  margin: 8px 0 12px;
+}
+.detail-link { display: inline-block; font-size: 12.5px; margin-bottom: 10px; }
+
+.travel-section {
+  margin-top: 16px;
+  padding-top: 14px;
+  border-top: 1px solid var(--paris-border);
+}
+.travel-header {
+  display: flex; align-items: center; justify-content: space-between;
+  gap: 10px; margin-bottom: 10px;
+}
+.travel-header h3 { margin: 0; font-size: 17px; font-weight: 600; }
+.travel-table {
+  width: 100%; border-collapse: collapse;
+  font-size: 13px; margin-bottom: 6px;
+}
+.travel-table td {
+  padding: 7px 4px;
+  border-bottom: 1px solid var(--paris-border);
+  vertical-align: top;
+}
+.travel-table tr:last-child td { border-bottom: 0; }
+.travel-table td.num { text-align: right; font-variant-numeric: tabular-nums; color: var(--paris-stone); }
+.travel-table em { color: var(--paris-terra-dk); font-style: normal; font-size: 12px; }
+.muted { color: var(--paris-mist); font-size: 11.5px; }
+
+.detail-actions {
+  display: flex; gap: 8px; margin-top: 18px;
+  padding-top: 14px; border-top: 1px solid var(--paris-border);
+}
+
+/* ===== Skjemaer ========================================================== */
+input, select, textarea {
+  font: inherit; font-size: 13.5px;
+  width: 100%;
+  padding: 9px 11px;
+  background: #fff;
+  border: 1px solid var(--paris-border-strong);
+  border-radius: var(--radius-sm);
+  color: var(--paris-ink);
+  transition: border-color .12s, box-shadow .12s;
+}
+input:focus, select:focus, textarea:focus {
+  outline: none;
+  border-color: var(--paris-terra);
+  box-shadow: 0 0 0 3px rgba(196, 120, 98, 0.15);
+}
+textarea { resize: vertical; min-height: 70px; }
+label {
+  display: block; font-size: 12px; font-weight: 500;
+  color: var(--paris-stone); margin: 0;
+}
+label > input, label > select, label > textarea { margin-top: 4px; }
+
+.form-grid { display: flex; flex-direction: column; gap: 12px; margin-top: 10px; }
+.form-row { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 10px; }
+.form-row.two { grid-template-columns: 1fr 1fr; }
+.form-actions { display: flex; gap: 8px; justify-content: flex-end; margin-top: 8px; }
+
+/* ===== Modal ============================================================= */
+.modal {
+  position: fixed; inset: 0;
+  z-index: 1000;
+  display: grid; place-items: center;
+  padding: 16px;
+}
+.modal[hidden] { display: none; }
+.modal__backdrop {
+  position: absolute; inset: 0;
+  background: rgba(45, 38, 32, 0.4);
+  backdrop-filter: blur(2px);
+}
+.modal__panel {
+  position: relative;
+  background: var(--paris-paper);
+  border-radius: var(--radius-lg);
+  box-shadow: 0 30px 80px var(--paris-shadow-strong);
+  width: 100%; max-width: 520px;
+  padding: 26px 28px 22px;
+  max-height: 90vh; overflow-y: auto;
+}
+.modal__panel h2 { margin: 0 0 4px; font-size: 24px; }
+.modal__close {
+  position: absolute; top: 12px; right: 12px;
+  width: 32px; height: 32px;
+  background: transparent; border: 0;
+  font-size: 22px; line-height: 1; color: var(--paris-stone);
+  cursor: pointer; border-radius: 8px;
+}
+.modal__close:hover { background: var(--paris-bone); color: var(--paris-ink); }
+body.modal-open { overflow: hidden; }
+
+/* ===== Toast ============================================================= */
+.toast {
+  position: fixed;
+  bottom: 24px; left: 50%;
+  transform: translate(-50%, 20px);
+  background: var(--paris-ink); color: #fff;
+  padding: 11px 18px;
+  border-radius: var(--radius);
+  font-size: 13px;
+  box-shadow: 0 10px 30px var(--paris-shadow-strong);
+  opacity: 0;
+  transition: opacity .2s, transform .2s;
+  z-index: 2000;
+  pointer-events: none;
+  max-width: calc(100vw - 32px);
+}
+.toast.is-visible {
+  opacity: 1;
+  transform: translate(-50%, 0);
+}
+.toast--success { background: #4a6f4f; }
+.toast--error   { background: var(--paris-terra-dk); }
+
+/* ===== Kart-markører ===================================================== */
+.pm-marker { background: transparent !important; border: 0 !important; }
+.pm-marker__dot {
+  width: 32px; height: 32px;
+  border-radius: 999px;
+  display: flex; align-items: center; justify-content: center;
+  color: #fff;
+  font-family: var(--ff-serif); font-weight: 700; font-size: 14px;
+  border: 2px solid #fff;
+  box-shadow: 0 3px 10px rgba(0,0,0,.25);
+  cursor: pointer;
+  transition: transform .12s;
+}
+.pm-marker__dot:hover { transform: scale(1.08); }
+
+.pm-marker__pin {
+  width: 28px; height: 28px;
+  border-radius: 8px;
+  display: flex; align-items: center; justify-content: center;
+  background: var(--paris-sky); color: #fff;
+  font-size: 14px;
+  border: 2px solid #fff;
+  box-shadow: 0 3px 10px rgba(0,0,0,.22);
+}
+.pm-marker__pin[data-type="school"]    { background: var(--paris-sage); }
+.pm-marker__pin[data-type="transport"] { background: var(--paris-sky); }
+.pm-marker__pin[data-type="sight"]     { background: var(--paris-rose); }
+.pm-marker__pin[data-type="other"]     { background: var(--paris-mist); }
+
+/* Leaflet popup-stil */
+.leaflet-popup-content-wrapper {
+  border-radius: var(--radius) !important;
+  box-shadow: 0 10px 30px var(--paris-shadow-strong) !important;
+  border: 1px solid var(--paris-border);
+}
+.leaflet-popup-content { margin: 12px 14px; font-family: var(--ff-sans); font-size: 13px; }
+.leaflet-popup-content .map-popup strong {
+  font-family: var(--ff-serif); font-size: 15px;
+}
+.leaflet-popup-content .map-popup .popup-line {
+  color: var(--paris-stone); font-size: 12px; margin-top: 3px;
+}
+.leaflet-popup-tip { box-shadow: 0 3px 14px var(--paris-shadow) !important; }
+
+/* ===== Mobil ============================================================= */
+.menu-toggle {
+  display: none;
+  position: fixed; top: 12px; left: 12px;
+  z-index: 500;
+  width: 42px; height: 42px;
+  border-radius: 10px;
+  background: var(--paris-paper);
+  border: 1px solid var(--paris-border-strong);
+  color: var(--paris-ink);
+  font-size: 20px; line-height: 1;
+  cursor: pointer;
+  box-shadow: 0 4px 12px var(--paris-shadow);
+}
+
+@media (max-width: 880px) {
+  .app { grid-template-columns: 1fr; grid-template-rows: 1fr; }
+  .sidebar {
+    position: fixed; inset: 0;
+    transform: translateX(-100%);
+    transition: transform .25s ease;
+    box-shadow: 0 0 60px var(--paris-shadow-strong);
+  }
+  .sidebar.is-open { transform: translateX(0); }
+  .menu-toggle { display: flex; align-items: center; justify-content: center; }
+  .form-row { grid-template-columns: 1fr 1fr; }
+}
+@media (max-width: 460px) {
+  .form-row, .form-row.two { grid-template-columns: 1fr; }
+  .inline-form { grid-template-columns: 1fr; }
+  .modal__panel { padding: 22px 18px 18px; }
+}
+</style>
+</head>
+<body>
+
+<button id="menu-toggle" class="menu-toggle" aria-label="Åpne meny" title="Meny">☰</button>
+
+<div class="app">
+  <aside id="sidebar" class="sidebar" aria-label="Sidepanel">
+    <header class="sidebar__header">
+      <h1 class="brand">Paris finder</h1>
+      <p class="brand__sub">Boligkartlegger</p>
+    </header>
+
+    <nav class="tabs" role="tablist">
+      <button class="tab-btn is-active" data-tab="apartments" role="tab">Leiligheter</button>
+      <button class="tab-btn" data-tab="fixed" role="tab">Steder</button>
+      <button class="tab-btn" data-tab="resources" role="tab">Lenker</button>
+      <button class="tab-btn" data-tab="data" role="tab">Data</button>
+    </nav>
+
+    <div class="sidebar__body">
+      <!-- ===== Leiligheter ===== -->
+      <section id="tab-apartments" class="tab-panel" role="tabpanel">
+        <div id="apartment-list-view">
+          <button id="btn-add-apartment" class="btn btn--primary btn--block">+ Ny leilighet</button>
+          <div id="apartment-list" class="card-list"></div>
+        </div>
+        <div id="apartment-detail" class="detail-panel" hidden></div>
+      </section>
+
+      <!-- ===== Faste punkter ===== -->
+      <section id="tab-fixed" class="tab-panel" role="tabpanel" hidden>
+        <button id="btn-add-fixed" class="btn btn--primary btn--block">+ Nytt sted</button>
+        <div id="fixed-list" class="card-list"></div>
+        <p class="help-text">
+          Legg til faste punkter som studiested, flyplasser og severdigheter. De brukes til å regne reisetid for hver leilighet.
+        </p>
+      </section>
+
+      <!-- ===== Ressurser / lenker ===== -->
+      <section id="tab-resources" class="tab-panel" role="tabpanel" hidden>
+        <form id="form-resource" class="inline-form" autocomplete="off">
+          <input name="name" placeholder="Navn (f.eks. PAP)" required aria-label="Navn på portal" />
+          <input name="url" placeholder="https://…" type="url" required aria-label="URL" />
+          <button type="submit" class="btn btn--primary">Legg til</button>
+        </form>
+        <div id="resource-list" class="card-list"></div>
+        <p class="help-text">
+          Lagre lenker til boligportaler her — PAP, SeLoger, Lodgis, Studapart, osv. Alt lagres lokalt i nettleseren.
+        </p>
+      </section>
+
+      <!-- ===== Data ===== -->
+      <section id="tab-data" class="tab-panel" role="tabpanel" hidden>
+        <div class="data-actions">
+          <button id="btn-export" class="btn">↓ Eksporter alt (JSON)</button>
+          <button id="btn-import" class="btn">↑ Importer fra fil…</button>
+          <input id="file-import" type="file" accept=".json,application/json" hidden />
+          <button id="btn-clear" class="btn btn--danger">Slett alt</button>
+        </div>
+        <div class="data-stats">
+          <span><strong id="stat-apt">0</strong>leiligheter</span>
+          <span><strong id="stat-fp">0</strong>steder</span>
+          <span><strong id="stat-rs">0</strong>lenker</span>
+        </div>
+        <p class="help-text">
+          Alt lagres i nettleserens <code>localStorage</code> — ingen server, ingen innlogging. Bruk eksport for å sikkerhetskopiere, eller for å flytte mellom enheter.
+        </p>
+      </section>
+    </div>
+  </aside>
+
+  <main class="map">
+    <div id="map" role="application" aria-label="Kart over Paris"></div>
+  </main>
+</div>
+
+<!-- ===== Modal: leilighet ===== -->
+<div id="modal-apartment" class="modal" role="dialog" aria-modal="true" hidden>
+  <div class="modal__backdrop" data-modal-close></div>
+  <div class="modal__panel">
+    <button class="modal__close" data-modal-close aria-label="Lukk">×</button>
+    <h2 class="serif" id="modal-apartment-title">Ny leilighet</h2>
+    <p class="muted" style="margin:0">Adressen blir automatisk geokodet og plassert på kartet.</p>
+    <form id="form-apartment" class="form-grid" autocomplete="off">
+      <label>Adresse
+        <input name="address" required placeholder="f.eks. 23 Rue de Rivoli, 75001 Paris" />
+      </label>
+      <div class="form-row">
+        <label>Pris (€/mnd)
+          <input name="price" type="number" min="0" step="10" inputmode="numeric" />
+        </label>
+        <label>Størrelse (m²)
+          <input name="size" type="number" min="0" step="1" inputmode="numeric" />
+        </label>
+        <label>Soverom
+          <input name="bedrooms" type="number" min="0" step="1" inputmode="numeric" />
+        </label>
+      </div>
+      <div class="form-row two">
+        <label>Score
+          <select name="score">
+            <option value="">—</option>
+            <option>A</option><option>B</option><option>C</option>
+            <option>D</option><option>E</option><option>F</option>
+          </select>
+        </label>
+        <label>Annonse-URL
+          <input name="url" type="url" placeholder="https://…" />
+        </label>
+      </div>
+      <label>Notater
+        <textarea name="notes" rows="3" placeholder="Hva fanget oppmerksomheten? Pluss og minus."></textarea>
+      </label>
+      <div class="form-actions">
+        <button type="button" class="btn btn--ghost" data-modal-close>Avbryt</button>
+        <button type="submit" class="btn btn--primary">Lagre</button>
+      </div>
+    </form>
+  </div>
+</div>
+
+<!-- ===== Modal: fast sted ===== -->
+<div id="modal-fixed" class="modal" role="dialog" aria-modal="true" hidden>
+  <div class="modal__backdrop" data-modal-close></div>
+  <div class="modal__panel">
+    <button class="modal__close" data-modal-close aria-label="Lukk">×</button>
+    <h2 class="serif" id="modal-fixed-title">Nytt sted</h2>
+    <p class="muted" style="margin:0">Adressen blir automatisk geokodet.</p>
+    <form id="form-fixed" class="form-grid" autocomplete="off">
+      <label>Navn
+        <input name="name" required placeholder="f.eks. Sciences Po" />
+      </label>
+      <label>Adresse
+        <input name="address" required placeholder="f.eks. 27 Rue Saint-Guillaume, 75007 Paris" />
+      </label>
+      <label>Type
+        <select name="type">
+          <option value="school">Skole / studiested</option>
+          <option value="transport">Transport (flyplass, stasjon)</option>
+          <option value="sight">Severdighet / annet sted</option>
+          <option value="other">Annet</option>
+        </select>
+      </label>
+      <div class="form-actions">
+        <button type="button" class="btn btn--ghost" data-modal-close>Avbryt</button>
+        <button type="submit" class="btn btn--primary">Lagre</button>
+      </div>
+    </form>
+  </div>
+</div>
+
+<div id="toast" class="toast" role="status" aria-live="polite"></div>
+
+<!-- Leaflet (kart) -->
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"
+        crossorigin=""></script>
+
+<script>
+/* =============================================================================
+   Paris finder — applikasjonskode
+   Vanilla JavaScript. Ingen rammeverk, ingen byggeverktøy.
+   All data lagres i localStorage. API-kall går via Netlify Functions slik at
+   Google-nøkkelen aldri eksponeres til klienten.
+   ========================================================================== */
+(function () {
+  'use strict';
+
+  // ---- Konstanter ---------------------------------------------------------
+  const STORAGE_KEY = 'parisFinder.v1';
+  const PARIS_CENTER = [48.8566, 2.3522];
+  const PARIS_ZOOM = 12;
+  const TYPE_LABEL = { school: 'Skole', transport: 'Transport', sight: 'Severdighet', other: 'Annet' };
+  const TYPE_SYMBOL = { school: '🎓', transport: '🚉', sight: '★', other: '◆' };
+
+  // ---- Tilstand -----------------------------------------------------------
+  const state = {
+    apartments: [],
+    fixedPoints: [],
+    resources: [],
+    selectedApartmentId: null,
+    activeTab: 'apartments',
+  };
+
+  let map = null;
+  const apartmentMarkers = new Map();
+  const fixedMarkers = new Map();
+
+  // ---- Hjelpere -----------------------------------------------------------
+  const $  = (sel, root = document) => root.querySelector(sel);
+  const $$ = (sel, root = document) => Array.from(root.querySelectorAll(sel));
+
+  function uid() {
+    return 'id_' + Math.random().toString(36).slice(2, 10) + Date.now().toString(36);
+  }
+  function escapeHTML(str) {
+    return String(str ?? '').replace(/[&<>"']/g, c => ({
+      '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;'
+    })[c]);
+  }
+  function formatPrice(n) {
+    if (n === null || n === undefined || n === '') return '—';
+    return '€' + Number(n).toLocaleString('nb-NO');
+  }
+  function formatTimestamp(ts) {
+    if (!ts) return '';
+    const d = new Date(ts);
+    return d.toLocaleString('nb-NO', { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' });
+  }
+
+  // ---- Lagring (localStorage) --------------------------------------------
+  function persist() {
+    try {
+      localStorage.setItem(STORAGE_KEY, JSON.stringify({
+        apartments: state.apartments,
+        fixedPoints: state.fixedPoints,
+        resources: state.resources,
+      }));
+    } catch (e) {
+      console.error('Klarte ikke å lagre:', e);
+      toast('Klarte ikke å lagre i nettleseren.', 'error');
+    }
+  }
+  function hydrate() {
+    try {
+      const raw = localStorage.getItem(STORAGE_KEY);
+      if (!raw) return;
+      const data = JSON.parse(raw);
+      if (Array.isArray(data.apartments))  state.apartments  = data.apartments;
+      if (Array.isArray(data.fixedPoints)) state.fixedPoints = data.fixedPoints;
+      if (Array.isArray(data.resources))   state.resources   = data.resources;
+    } catch (e) {
+      console.error('Klarte ikke å laste lagrede data:', e);
+    }
+  }
+
+  // ---- API (Netlify Functions) -------------------------------------------
+  async function apiGeocode(address) {
+    const resp = await fetch(`/api/geocode?address=${encodeURIComponent(address)}`);
+    const data = await resp.json().catch(() => ({}));
+    if (!resp.ok) {
+      throw new Error(data.error || `Geokoding feilet (HTTP ${resp.status})`);
+    }
+    return data;
+  }
+
+  async function apiTransit(origin, destinations, mode = 'transit') {
+    const resp = await fetch('/api/transit', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ origin, destinations, mode }),
+    });
+    const data = await resp.json().catch(() => ({}));
+    if (!resp.ok) {
+      throw new Error(data.error || `Reisetid feilet (HTTP ${resp.status})`);
+    }
+    return data;
+  }
+
+  // ---- Kart ---------------------------------------------------------------
+  function initMap() {
+    map = L.map('map', { zoomControl: true }).setView(PARIS_CENTER, PARIS_ZOOM);
+    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+      attribution: '© <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>',
+      maxZoom: 19,
+    }).addTo(map);
+    map.zoomControl.setPosition('bottomright');
+  }
+
+  function aptIcon(apt) {
+    const colors = {
+      A: 'var(--score-A)', B: 'var(--score-B)', C: 'var(--score-C)',
+      D: 'var(--score-D)', E: 'var(--score-E)', F: 'var(--score-F)',
+    };
+    const color = colors[apt.score] || 'var(--paris-mist)';
+    const label = apt.score || '·';
+    return L.divIcon({
+      className: 'pm-marker',
+      html: `<div class="pm-marker__dot" style="background:${color}">${label}</div>`,
+      iconSize: [32, 32],
+      iconAnchor: [16, 16],
+      popupAnchor: [0, -16],
+    });
+  }
+  function fixedIcon(fp) {
+    const type = fp.type || 'other';
+    const sym  = TYPE_SYMBOL[type] || '◆';
+    return L.divIcon({
+      className: 'pm-marker',
+      html: `<div class="pm-marker__pin" data-type="${type}">${sym}</div>`,
+      iconSize: [28, 28],
+      iconAnchor: [14, 14],
+      popupAnchor: [0, -14],
+    });
+  }
+  function aptPopupHTML(apt) {
+    const meta = [
+      formatPrice(apt.price),
+      apt.size ? `${apt.size} m²` : null,
+      apt.bedrooms != null ? `${apt.bedrooms} sov.` : null,
+    ].filter(Boolean).join(' · ');
+    const score = apt.score ? `<span class="popup-line">Score: <strong>${apt.score}</strong></span>` : '';
+    return `<div class="map-popup">
+      <strong>${escapeHTML(apt.address || 'Uten adresse')}</strong>
+      <div class="popup-line">${escapeHTML(meta)}</div>
+      ${score}
+    </div>`;
+  }
+  function fixedPopupHTML(fp) {
+    return `<div class="map-popup">
+      <strong>${escapeHTML(fp.name)}</strong>
+      <div class="popup-line">${escapeHTML(TYPE_LABEL[fp.type] || 'Sted')} · ${escapeHTML(fp.address || '')}</div>
+    </div>`;
+  }
+
+  function syncMarkers() {
+    // Fjern markører som ikke lenger finnes
+    for (const [id, marker] of apartmentMarkers) {
+      if (!state.apartments.find(a => a.id === id)) {
+        map.removeLayer(marker);
+        apartmentMarkers.delete(id);
+      }
+    }
+    for (const [id, marker] of fixedMarkers) {
+      if (!state.fixedPoints.find(f => f.id === id)) {
+        map.removeLayer(marker);
+        fixedMarkers.delete(id);
+      }
+    }
+    // Legg til / oppdater leiligheter
+    for (const apt of state.apartments) {
+      if (typeof apt.lat !== 'number' || typeof apt.lng !== 'number') continue;
+      let m = apartmentMarkers.get(apt.id);
+      if (!m) {
+        m = L.marker([apt.lat, apt.lng], { icon: aptIcon(apt) }).addTo(map);
+        m.on('click', () => selectApartment(apt.id));
+        apartmentMarkers.set(apt.id, m);
+      } else {
+        m.setLatLng([apt.lat, apt.lng]);
+        m.setIcon(aptIcon(apt));
+      }
+      m.bindPopup(aptPopupHTML(apt));
+    }
+    // Legg til / oppdater faste punkter
+    for (const fp of state.fixedPoints) {
+      if (typeof fp.lat !== 'number' || typeof fp.lng !== 'number') continue;
+      let m = fixedMarkers.get(fp.id);
+      if (!m) {
+        m = L.marker([fp.lat, fp.lng], { icon: fixedIcon(fp), zIndexOffset: -50 }).addTo(map);
+        fixedMarkers.set(fp.id, m);
+      } else {
+        m.setLatLng([fp.lat, fp.lng]);
+        m.setIcon(fixedIcon(fp));
+      }
+      m.bindPopup(fixedPopupHTML(fp));
+    }
+  }
+
+  // ---- Rendering ----------------------------------------------------------
+  function render() {
+    renderTabs();
+    renderStats();
+    syncMarkers();
+  }
+
+  function renderTabs() {
+    $$('.tab-panel').forEach(p => p.hidden = true);
+    const panel = $(`#tab-${state.activeTab}`);
+    if (panel) panel.hidden = false;
+    $$('.tab-btn').forEach(b => b.classList.toggle('is-active', b.dataset.tab === state.activeTab));
+
+    if (state.activeTab === 'apartments') renderApartments();
+    else if (state.activeTab === 'fixed') renderFixedPoints();
+    else if (state.activeTab === 'resources') renderResources();
+  }
+
+  function renderApartments() {
+    if (state.selectedApartmentId) {
+      const apt = state.apartments.find(a => a.id === state.selectedApartmentId);
+      if (apt) { renderApartmentDetail(apt); return; }
+      state.selectedApartmentId = null;
+    }
+    $('#apartment-list-view').hidden = false;
+    $('#apartment-detail').hidden = true;
+
+    const listEl = $('#apartment-list');
+    if (state.apartments.length === 0) {
+      listEl.innerHTML = `<div class="empty">
+        Ingen leiligheter lagret enda.
+        <small>Trykk «+ Ny leilighet» for å begynne.</small>
+      </div>`;
+      return;
+    }
+
+    // Sortér på score (A først), så pris
+    const sorted = [...state.apartments].sort((a, b) => {
+      const sa = a.score || 'Z', sb = b.score || 'Z';
+      if (sa !== sb) return sa.localeCompare(sb);
+      return (a.price ?? Infinity) - (b.price ?? Infinity);
+    });
+
+    listEl.innerHTML = sorted.map(apt => `
+      <article class="apt-card" data-id="${apt.id}" role="button" tabindex="0">
+        <header class="apt-card__head">
+          <div class="apt-card__addr">${escapeHTML(apt.address || 'Uten adresse')}</div>
+          ${apt.score ? `<span class="score-pill" data-score="${apt.score}">${apt.score}</span>` : ''}
+        </header>
+        <div class="apt-card__meta">
+          <span>${formatPrice(apt.price)}</span>
+          ${apt.size ? `<span>${apt.size} m²</span>` : ''}
+          ${apt.bedrooms != null ? `<span>${apt.bedrooms} sov.</span>` : ''}
+        </div>
+        ${apt.notes ? `<p class="apt-card__notes">${escapeHTML(apt.notes)}</p>` : ''}
+      </article>
+    `).join('');
+
+    $$('.apt-card', listEl).forEach(card => {
+      card.addEventListener('click', () => selectApartment(card.dataset.id));
+      card.addEventListener('keydown', e => {
+        if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); selectApartment(card.dataset.id); }
+      });
+    });
+  }
+
+  function renderApartmentDetail(apt) {
+    $('#apartment-list-view').hidden = true;
+    const detail = $('#apartment-detail');
+    detail.hidden = false;
+
+    const tt = apt.travelTimes || {};
+    const fixedSorted = [...state.fixedPoints].sort((a, b) => a.name.localeCompare(b.name));
+    const ttRows = fixedSorted
+      .filter(fp => typeof fp.lat === 'number')
+      .map(fp => {
+        const entry = tt[fp.id];
+        let cell = '—';
+        if (entry) {
+          if (entry.status === 'OK' && entry.duration_text) {
+            const dist = entry.distance_text ? ` <span class="muted">(${escapeHTML(entry.distance_text)})</span>` : '';
+            cell = `${escapeHTML(entry.duration_text)}${dist}`;
+          } else if (entry.status && entry.status !== 'OK') {
+            cell = `<em>${escapeHTML(entry.status)}</em>`;
+          }
+        }
+        const sym = TYPE_SYMBOL[fp.type] || '◆';
+        return `<tr><td>${sym} ${escapeHTML(fp.name)}</td><td class="num">${cell}</td></tr>`;
+      }).join('');
+
+    const ttFooter = apt.travelTimesUpdated
+      ? `<small class="muted">Sist oppdatert: ${formatTimestamp(apt.travelTimesUpdated)}</small>`
+      : `<small class="muted">Ikke beregnet enda.</small>`;
+
+    detail.innerHTML = `
+      <button class="btn-back" data-action="back">← Tilbake til lista</button>
+      <h2 class="serif">${escapeHTML(apt.address || 'Uten adresse')}</h2>
+      <div class="detail-meta">
+        <span class="meta-chip">${formatPrice(apt.price)}</span>
+        ${apt.size ? `<span class="meta-chip">${apt.size} m²</span>` : ''}
+        ${apt.bedrooms != null ? `<span class="meta-chip">${apt.bedrooms} soverom</span>` : ''}
+        ${apt.score ? `<span class="score-pill" data-score="${apt.score}">${apt.score}</span>` : ''}
+      </div>
+      ${apt.url ? `<p class="detail-link"><a href="${escapeHTML(apt.url)}" target="_blank" rel="noopener noreferrer">Åpne annonse ↗</a></p>` : ''}
+      ${apt.notes ? `<div class="notes">${escapeHTML(apt.notes)}</div>` : ''}
+
+      <section class="travel-section">
+        <header class="travel-header">
+          <h3 class="serif">Reisetid · kollektiv, hverdag 08:00</h3>
+          <button class="btn btn--sm" data-action="refresh-travel" ${state.fixedPoints.length === 0 ? 'disabled' : ''}>
+            ${apt.travelTimesUpdated ? 'Oppdater' : 'Beregn'}
+          </button>
+        </header>
+        ${state.fixedPoints.length === 0
+          ? '<p class="muted">Legg til faste punkter under «Steder» for å beregne reisetider.</p>'
+          : `<table class="travel-table"><tbody>${ttRows}</tbody></table>${ttFooter}`
+        }
+      </section>
+
+      <div class="detail-actions">
+        <button class="btn btn--ghost" data-action="edit">Rediger</button>
+        <button class="btn btn--danger" data-action="delete">Slett</button>
+      </div>
+    `;
+
+    detail.querySelector('[data-action="back"]').addEventListener('click', () => {
+      state.selectedApartmentId = null; render();
+    });
+    detail.querySelector('[data-action="edit"]').addEventListener('click', () => openApartmentForm(apt.id));
+    detail.querySelector('[data-action="delete"]').addEventListener('click', () => {
+      if (!confirm(`Slette «${apt.address}»? Dette kan ikke angres.`)) return;
+      state.apartments = state.apartments.filter(a => a.id !== apt.id);
+      state.selectedApartmentId = null;
+      persist(); render();
+      toast('Leilighet slettet.', 'success');
+    });
+    const refreshBtn = detail.querySelector('[data-action="refresh-travel"]');
+    if (refreshBtn) refreshBtn.addEventListener('click', () => refreshTravelTimes(apt.id));
+
+    if (typeof apt.lat === 'number') {
+      map.flyTo([apt.lat, apt.lng], Math.max(map.getZoom(), 14), { duration: 0.6 });
+    }
+  }
+
+  function selectApartment(id) {
+    state.selectedApartmentId = id;
+    state.activeTab = 'apartments';
+    // På mobil: lukk sidebar etter klikk på markør for å vise kartet (men ikke når man trykker på et kort i lista)
+    render();
+    // Åpne tilhørende markør-popup
+    const marker = apartmentMarkers.get(id);
+    if (marker) marker.openPopup();
+  }
+
+  // ---- Faste punkter ------------------------------------------------------
+  function renderFixedPoints() {
+    const listEl = $('#fixed-list');
+    if (state.fixedPoints.length === 0) {
+      listEl.innerHTML = `<div class="empty">
+        Ingen faste punkter enda.
+        <small>Legg til studiested, flyplass, severdigheter o.l.</small>
+      </div>`;
+      return;
+    }
+    const sorted = [...state.fixedPoints].sort((a, b) => a.name.localeCompare(b.name));
+    listEl.innerHTML = sorted.map(fp => `
+      <article class="fixed-card" data-id="${fp.id}">
+        <span class="fixed-card__icon" data-type="${fp.type || 'other'}">${TYPE_SYMBOL[fp.type] || '◆'}</span>
+        <div class="fixed-card__body">
+          <div class="fixed-card__name">${escapeHTML(fp.name)}</div>
+          <div class="fixed-card__addr">${escapeHTML(fp.address || '')}</div>
+        </div>
+        <div class="fixed-card__actions">
+          <button class="icon-btn" data-action="locate" title="Vis på kartet" aria-label="Vis på kartet">⊕</button>
+          <button class="icon-btn" data-action="edit" title="Rediger" aria-label="Rediger">✎</button>
+          <button class="icon-btn" data-action="delete" title="Slett" aria-label="Slett">×</button>
+        </div>
+      </article>
+    `).join('');
+
+    $$('.fixed-card', listEl).forEach(card => {
+      const id = card.dataset.id;
+      const fp = state.fixedPoints.find(f => f.id === id);
+      card.querySelector('[data-action="locate"]').addEventListener('click', () => {
+        if (typeof fp.lat === 'number') {
+          map.flyTo([fp.lat, fp.lng], 15, { duration: 0.6 });
+          fixedMarkers.get(fp.id)?.openPopup();
+          closeSidebarOnMobile();
+        }
+      });
+      card.querySelector('[data-action="edit"]').addEventListener('click', () => openFixedForm(id));
+      card.querySelector('[data-action="delete"]').addEventListener('click', () => {
+        if (!confirm(`Slette «${fp.name}»?`)) return;
+        state.fixedPoints = state.fixedPoints.filter(f => f.id !== id);
+        // Invaliderer cachede reisetider mot dette punktet
+        state.apartments.forEach(a => { if (a.travelTimes) delete a.travelTimes[id]; });
+        persist(); render();
+        toast('Stedet er slettet.', 'success');
+      });
+    });
+  }
+
+  // ---- Ressurser ----------------------------------------------------------
+  function renderResources() {
+    const listEl = $('#resource-list');
+    if (state.resources.length === 0) {
+      listEl.innerHTML = `<div class="empty">
+        Ingen lenker lagret.
+        <small>Lim inn boligportaler du vil ha lett tilgang til.</small>
+      </div>`;
+      return;
+    }
+    listEl.innerHTML = state.resources.map(r => `
+      <article class="resource-card" data-id="${r.id}">
+        <div style="min-width:0;flex:1">
+          <a href="${escapeHTML(r.url)}" target="_blank" rel="noopener noreferrer">${escapeHTML(r.name)}</a>
+          <span class="resource-card__url">${escapeHTML(r.url)}</span>
+        </div>
+        <button class="icon-btn" data-action="delete" title="Slett" aria-label="Slett">×</button>
+      </article>
+    `).join('');
+    $$('.resource-card', listEl).forEach(card => {
+      card.querySelector('[data-action="delete"]').addEventListener('click', () => {
+        state.resources = state.resources.filter(r => r.id !== card.dataset.id);
+        persist(); render();
+      });
+    });
+  }
+
+  function renderStats() {
+    $('#stat-apt').textContent = state.apartments.length;
+    $('#stat-fp').textContent  = state.fixedPoints.length;
+    $('#stat-rs').textContent  = state.resources.length;
+  }
+
+  // ---- Reisetidsberegning -------------------------------------------------
+  async function refreshTravelTimes(aptId) {
+    const apt = state.apartments.find(a => a.id === aptId);
+    if (!apt) return;
+    if (typeof apt.lat !== 'number') {
+      toast('Leiligheten mangler koordinater.', 'error');
+      return;
+    }
+    const fixed = state.fixedPoints.filter(fp => typeof fp.lat === 'number');
+    if (fixed.length === 0) {
+      toast('Ingen faste punkter å beregne mot.', 'info');
+      return;
+    }
+
+    const btn = document.querySelector('[data-action="refresh-travel"]');
+    const original = btn?.textContent;
+    if (btn) { btn.disabled = true; btn.textContent = 'Beregner…'; }
+
+    try {
+      const data = await apiTransit(
+        { lat: apt.lat, lng: apt.lng },
+        fixed.map(fp => ({ lat: fp.lat, lng: fp.lng }))
+      );
+      const travelTimes = {};
+      data.results.forEach((r, i) => {
+        const fp = fixed[i];
+        travelTimes[fp.id] = {
+          status: r.status,
+          duration_text: r.duration_text,
+          duration_value: r.duration_value,
+          distance_text: r.distance_text,
+        };
+      });
+      apt.travelTimes = travelTimes;
+      apt.travelTimesUpdated = Date.now();
+      persist();
+      render();
+      toast('Reisetider oppdatert.', 'success');
+    } catch (err) {
+      console.error(err);
+      toast(`Feil: ${err.message}`, 'error');
+    } finally {
+      if (btn) { btn.disabled = false; btn.textContent = original || 'Oppdater'; }
+    }
+  }
+
+  // ---- Skjema: leilighet --------------------------------------------------
+  function openApartmentForm(id = null) {
+    const apt = id ? state.apartments.find(a => a.id === id) : null;
+    const form = $('#form-apartment');
+    form.reset();
+    form.dataset.editingId = id || '';
+    $('#modal-apartment-title').textContent = apt ? 'Rediger leilighet' : 'Ny leilighet';
+    if (apt) {
+      form.address.value  = apt.address || '';
+      form.price.value    = apt.price ?? '';
+      form.size.value     = apt.size ?? '';
+      form.bedrooms.value = apt.bedrooms ?? '';
+      form.url.value      = apt.url || '';
+      form.score.value    = apt.score || '';
+      form.notes.value    = apt.notes || '';
+    }
+    showModal($('#modal-apartment'));
+  }
+
+  async function handleApartmentSubmit(e) {
+    e.preventDefault();
+    const form = e.target;
+    const id = form.dataset.editingId || null;
+    const existing = id ? state.apartments.find(a => a.id === id) : null;
+
+    const address = form.address.value.trim();
+    if (!address) { toast('Adresse er påkrevd.', 'error'); return; }
+
+    const fields = {
+      address,
+      price:    form.price.value    !== '' ? Number(form.price.value)    : null,
+      size:     form.size.value     !== '' ? Number(form.size.value)     : null,
+      bedrooms: form.bedrooms.value !== '' ? Number(form.bedrooms.value) : null,
+      url:      form.url.value.trim() || null,
+      score:    form.score.value || null,
+      notes:    form.notes.value.trim() || null,
+    };
+
+    const submitBtn = form.querySelector('[type="submit"]');
+    submitBtn.disabled = true;
+    submitBtn.textContent = 'Geokoder…';
+
+    try {
+      // Geokod adressen kun hvis ny eller endret
+      let lat = existing?.lat, lng = existing?.lng, formatted = existing?.formatted_address;
+      const addressChanged = !existing || existing.address !== address;
+      if (addressChanged) {
+        const geo = await apiGeocode(address);
+        lat = geo.lat; lng = geo.lng; formatted = geo.formatted_address;
+      }
+
+      const apt = {
+        ...(existing || {}),
+        ...fields,
+        id: id || uid(),
+        lat, lng,
+        formatted_address: formatted,
+        // Invalider reisetider hvis adressen ble endret
+        travelTimes:        addressChanged ? {}   : (existing.travelTimes ?? {}),
+        travelTimesUpdated: addressChanged ? null : (existing.travelTimesUpdated ?? null),
+      };
+
+      if (existing) {
+        state.apartments = state.apartments.map(a => a.id === existing.id ? apt : a);
+      } else {
+        state.apartments.push(apt);
+      }
+      persist();
+      closeModal($('#modal-apartment'));
+      state.selectedApartmentId = apt.id;
+      state.activeTab = 'apartments';
+      render();
+      toast(existing ? 'Leilighet oppdatert.' : 'Leilighet lagt til.', 'success');
+    } catch (err) {
+      console.error(err);
+      toast(`Klarte ikke å lagre: ${err.message}`, 'error');
+    } finally {
+      submitBtn.disabled = false;
+      submitBtn.textContent = 'Lagre';
+    }
+  }
+
+  // ---- Skjema: fast punkt -------------------------------------------------
+  function openFixedForm(id = null) {
+    const fp = id ? state.fixedPoints.find(f => f.id === id) : null;
+    const form = $('#form-fixed');
+    form.reset();
+    form.dataset.editingId = id || '';
+    $('#modal-fixed-title').textContent = fp ? 'Rediger sted' : 'Nytt sted';
+    if (fp) {
+      // f.elements.namedItem unngår kollisjon med HTMLFormElement.name
+      form.elements.namedItem('name').value = fp.name || '';
+      form.address.value = fp.address || '';
+      form.type.value    = fp.type || 'school';
+    }
+    showModal($('#modal-fixed'));
+  }
+
+  async function handleFixedSubmit(e) {
+    e.preventDefault();
+    const form = e.target;
+    const id = form.dataset.editingId || null;
+    const existing = id ? state.fixedPoints.find(f => f.id === id) : null;
+
+    const name = form.elements.namedItem('name').value.trim();
+    const address = form.address.value.trim();
+    if (!name || !address) { toast('Navn og adresse er påkrevd.', 'error'); return; }
+
+    const type = form.type.value || 'other';
+
+    const submitBtn = form.querySelector('[type="submit"]');
+    submitBtn.disabled = true;
+    submitBtn.textContent = 'Geokoder…';
+
+    try {
+      let lat = existing?.lat, lng = existing?.lng, formatted = existing?.formatted_address;
+      const addressChanged = !existing || existing.address !== address;
+      if (addressChanged) {
+        const geo = await apiGeocode(address);
+        lat = geo.lat; lng = geo.lng; formatted = geo.formatted_address;
+      }
+
+      const fp = {
+        ...(existing || {}),
+        id: id || uid(),
+        name, address, type,
+        lat, lng,
+        formatted_address: formatted,
+      };
+
+      if (existing) {
+        state.fixedPoints = state.fixedPoints.map(f => f.id === existing.id ? fp : f);
+        // Hvis adressen er endret skal cachede reisetider mot dette punktet forkastes
+        if (addressChanged) {
+          state.apartments.forEach(a => {
+            if (a.travelTimes && a.travelTimes[fp.id]) delete a.travelTimes[fp.id];
+          });
+        }
+      } else {
+        state.fixedPoints.push(fp);
+      }
+      persist();
+      closeModal($('#modal-fixed'));
+      render();
+      toast(existing ? 'Sted oppdatert.' : 'Sted lagt til.', 'success');
+    } catch (err) {
+      console.error(err);
+      toast(`Klarte ikke å lagre: ${err.message}`, 'error');
+    } finally {
+      submitBtn.disabled = false;
+      submitBtn.textContent = 'Lagre';
+    }
+  }
+
+  // ---- Ressurser ----------------------------------------------------------
+  function addResource(name, url) {
+    if (!name || !url) return;
+    try { new URL(url); } catch { toast('Ugyldig URL.', 'error'); return; }
+    state.resources.push({ id: uid(), name, url });
+    persist(); render();
+  }
+
+  // ---- Import / eksport --------------------------------------------------
+  function exportData() {
+    const payload = {
+      version: 1,
+      exported_at: new Date().toISOString(),
+      apartments: state.apartments,
+      fixedPoints: state.fixedPoints,
+      resources: state.resources,
+    };
+    const blob = new Blob([JSON.stringify(payload, null, 2)], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `paris-finder-${new Date().toISOString().slice(0, 10)}.json`;
+    document.body.appendChild(a); a.click(); a.remove();
+    URL.revokeObjectURL(url);
+    toast('Eksportert.', 'success');
+  }
+
+  function importData(file) {
+    const reader = new FileReader();
+    reader.onload = () => {
+      try {
+        const data = JSON.parse(reader.result);
+        if (typeof data !== 'object' || data === null) throw new Error('Ugyldig fil.');
+        if (!Array.isArray(data.apartments) && !Array.isArray(data.fixedPoints) && !Array.isArray(data.resources)) {
+          throw new Error('Filen inneholder ingen kjente data.');
+        }
+        const replace = confirm(
+          'Vil du ERSTATTE eksisterende data?\n\n' +
+          'OK = erstatt alt\n' +
+          'Avbryt = slå sammen (legg til uten å fjerne eksisterende)'
+        );
+        if (replace) {
+          state.apartments  = Array.isArray(data.apartments)  ? data.apartments  : [];
+          state.fixedPoints = Array.isArray(data.fixedPoints) ? data.fixedPoints : [];
+          state.resources   = Array.isArray(data.resources)   ? data.resources   : [];
+        } else {
+          const merge = (target, source) => {
+            const ids = new Set(target.map(x => x.id));
+            for (const item of source) if (!ids.has(item.id)) target.push(item);
+          };
+          if (Array.isArray(data.apartments))  merge(state.apartments,  data.apartments);
+          if (Array.isArray(data.fixedPoints)) merge(state.fixedPoints, data.fixedPoints);
+          if (Array.isArray(data.resources))   merge(state.resources,   data.resources);
+        }
+        persist(); render();
+        toast('Import fullført.', 'success');
+      } catch (err) {
+        console.error(err);
+        toast(`Import feilet: ${err.message}`, 'error');
+      }
+    };
+    reader.onerror = () => toast('Klarte ikke å lese filen.', 'error');
+    reader.readAsText(file);
+  }
+
+  function clearAllData() {
+    if (!confirm('Slette ALT? Dette fjerner alle leiligheter, steder og lenker fra denne nettleseren. Eksporter først om du vil ha en sikkerhetskopi.')) return;
+    state.apartments = []; state.fixedPoints = []; state.resources = [];
+    state.selectedApartmentId = null;
+    persist(); render();
+    toast('Alt er slettet.', 'success');
+  }
+
+  // ---- Modal / sidebar helpers -------------------------------------------
+  function showModal(modal) {
+    modal.hidden = false;
+    document.body.classList.add('modal-open');
+    setTimeout(() => modal.querySelector('input, select, textarea, button')?.focus(), 50);
+  }
+  function closeModal(modal) {
+    modal.hidden = true;
+    document.body.classList.remove('modal-open');
+  }
+  function closeSidebarOnMobile() {
+    if (window.matchMedia('(max-width: 880px)').matches) {
+      $('#sidebar').classList.remove('is-open');
+    }
+  }
+
+  // ---- Toast --------------------------------------------------------------
+  let toastTimer = null;
+  function toast(msg, type = 'info') {
+    const el = $('#toast');
+    el.textContent = msg;
+    el.className = `toast toast--${type} is-visible`;
+    clearTimeout(toastTimer);
+    toastTimer = setTimeout(() => el.classList.remove('is-visible'), 3500);
+  }
+
+  // ---- Eventbinding -------------------------------------------------------
+  function bindEvents() {
+    // Faner
+    $$('.tab-btn').forEach(b => {
+      b.addEventListener('click', () => {
+        state.activeTab = b.dataset.tab;
+        state.selectedApartmentId = null;
+        render();
+      });
+    });
+
+    // Mobilmeny
+    $('#menu-toggle').addEventListener('click', () => $('#sidebar').classList.toggle('is-open'));
+    $('#map').addEventListener('click', closeSidebarOnMobile);
+
+    // Leilighet
+    $('#btn-add-apartment').addEventListener('click', () => openApartmentForm());
+    $('#form-apartment').addEventListener('submit', handleApartmentSubmit);
+
+    // Faste punkter
+    $('#btn-add-fixed').addEventListener('click', () => openFixedForm());
+    $('#form-fixed').addEventListener('submit', handleFixedSubmit);
+
+    // Ressurser
+    $('#form-resource').addEventListener('submit', e => {
+      e.preventDefault();
+      const f = e.target;
+      // NB: f.name peker på skjemaets name-attributt, ikke inputen — bruk elements.
+      const nameInput = f.elements.namedItem('name');
+      const urlInput  = f.elements.namedItem('url');
+      addResource(nameInput.value.trim(), urlInput.value.trim());
+      f.reset();
+      nameInput.focus();
+    });
+
+    // Modaler
+    $$('[data-modal-close]').forEach(el => {
+      el.addEventListener('click', () => {
+        const m = el.closest('.modal');
+        if (m) closeModal(m);
+      });
+    });
+    document.addEventListener('keydown', e => {
+      if (e.key === 'Escape') {
+        $$('.modal:not([hidden])').forEach(m => closeModal(m));
+      }
+    });
+
+    // Data
+    $('#btn-export').addEventListener('click', exportData);
+    $('#btn-import').addEventListener('click', () => $('#file-import').click());
+    $('#file-import').addEventListener('change', e => {
+      const file = e.target.files?.[0];
+      if (file) importData(file);
+      e.target.value = '';
+    });
+    $('#btn-clear').addEventListener('click', clearAllData);
+  }
+
+  // ---- Init ---------------------------------------------------------------
+  function init() {
+    hydrate();
+    initMap();
+    bindEvents();
+    render();
+    // Sørg for at kartet er korrekt størrelse etter mount
+    setTimeout(() => map.invalidateSize(), 100);
+    window.addEventListener('resize', () => map && map.invalidateSize());
+  }
+
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', init);
+  } else {
+    init();
+  }
+})();
+</script>
+</body>
+</html>

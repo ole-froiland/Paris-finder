@@ -1,0 +1,29 @@
+# Netlify-konfigurasjon for Paris-finder
+# ---------------------------------------
+# - "publish" peker på rotmappen siden alt er statisk (kun index.html).
+# - "functions" peker på mappen med våre serverløse funksjoner.
+# - Rewrite gjør at vi kan kalle /api/geocode og /api/transit i frontend
+#   i stedet for den litt stygge /.netlify/functions/-stien.
+
+[build]
+  publish = "."
+  functions = "netlify/functions"
+
+[functions]
+  # esbuild gir raskest cold start og støtter ES-moduler (.mjs)
+  node_bundler = "esbuild"
+
+# Pene URL-er: /api/* → /.netlify/functions/*
+[[redirects]]
+  from = "/api/*"
+  to = "/.netlify/functions/:splat"
+  status = 200
+
+# Sikkerhetshoder for hele siden
+[[headers]]
+  for = "/*"
+  [headers.values]
+    X-Frame-Options = "DENY"
+    X-Content-Type-Options = "nosniff"
+    Referrer-Policy = "strict-origin-when-cross-origin"
+    Permissions-Policy = "geolocation=(self)"
