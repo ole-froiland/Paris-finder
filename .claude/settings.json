@@ -1,0 +1,8 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(awk '/<script>/{flag=1; next} /<\\\\/script>/{flag=0} flag && !/<script.*src=/' index.html)",
+      "Bash(node --check /tmp/app.js)"
+    ]
+  }
+}
